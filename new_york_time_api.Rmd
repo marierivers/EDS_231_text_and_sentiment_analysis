@@ -1,0 +1,208 @@
+---
+title: "Untitled"
+author: "Marie Rivers"
+date: "4/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Topic 2: Text Data in R
+# Connect to the New York Times API and send a query
+
+```{r}
+library(jsonlite) #convert results from API queries into R-friendly formats 
+library(tidyverse) 
+library(tidytext) #text data management and analysis
+library(ggplot2) #plot word frequencies and publication dates
+```
+q=xxx for query equals
+API key
+
+```{r}
+#create an object called x with the results of our query ("haaland")
+# the from JSON flatten the JSON object, then convert to a data frame
+api_key <- # article search api
+q <- # query term
+t <- fromJSON("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=haaland&api-key=GW3whn8dTpvpdcAD1AIAiUMix03szFDn", flatten = TRUE) #the string following "key=" is your API key 
+
+class(t) #what type of object is t?
+
+t <- t %>% 
+  data.frame()
+```
+
+```{r}
+#Inspect our data
+class(t) #now what is it?
+dim(t) # how big is it?
+names(t) # what variables are we working with?
+#t <- readRDS("nytDat.rds") #in case of API emergency :)
+```
+
+```{r}
+t$response.docs.snippet[9]
+# $response refers to the 'response column' from the api results
+# snippets (from the NY Times) are sentences. `snippet[9]` pulls the 9th sentence
+# try `response.docs.lead_paragraph` to get paragraphs
+
+#assign a snippet to x to use as fodder for stringr functions.  You can follow along using the sentence on the next line.
+```
+
+
+```{r}
+x <- "Her nomination as secretary of the interior is historic, but as the first Native cabinet member, she would have to strike a delicate balance."
+```
+
+
+```{r}
+tolower(x)
+str_split(x, ','); str_split(x, 't')
+str_replace(x, 'historic', 'without precedent')
+str_replace(x, ' ', '_') #first one
+#how do we replace all of them?
+
+str_detect(x, 't'); str_detect(x, 'tive') ### is pattern in the string? T/F
+str_locate(x, 't'); str_locate_all(x, 'as')
+```
+
+## set some parameters for a bigger query
+```{r}
+term <- "Haaland" # Need to use + to string together separate words
+begin_date <- "20210120"
+end_date <- "20220401"
+
+#construct the query url using API operators
+baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",term,
+                  "&begin_date=",begin_date,"&end_date=",end_date,
+                  "&facet_filter=true&api-key=","NTKBHbsb6XFEkGymGumAiba7n3uBvs8V", sep="")
+
+#examine our query url
+```
+
+```{r}
+#this code allows for obtaining multiple pages of query results 
+ initialQuery <- fromJSON(baseurl)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) # might time out at 8 or 9 pages
+
+pages <- list()
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+  message("Retrieving page ", i)
+  pages[[i+1]] <- nytSearch 
+  Sys.sleep(6) # change Sys.sleep to 6
+}
+class(nytSearch)
+```
+
+```{r}
+# this might be a good place to export to csv as a backup in case the api times out
+write_csv(nyData, here("data", "example_nyDat.csv"))
+```
+
+```{r}
+# xxx
+example_nytDat <- read_csv("data/example_nyDat.csv")
+```
+
+
+```{r}
+#nytDat <- read.csv("nytDat.csv") # obtained from 
+
+example_nytDat %>% 
+  group_by(response.docs.type_of_material) %>%
+  summarize(count=n()) %>%
+  mutate(percent = (count / sum(count))*100) %>%
+  ggplot() +
+  geom_bar(aes(y=percent, x=response.docs.type_of_material, fill=response.docs.type_of_material), stat = "identity") + coord_flip()
+```
+
+```{r}
+nytDat %>%
+  mutate(pubDay=gsub("T.*","",response.docs.pub_date)) %>%
+  group_by(pubDay) %>%
+  summarise(count=n()) %>%
+  filter(count >= 2) %>%
+  ggplot() +
+  geom_bar(aes(x=reorder(pubDay, count), y=count), stat="identity") + coord_flip()
+```
+
+The New York Times doesn’t make full text of the articles available through the API. But we can use the first paragraph of each article.
+
+The NY Times includes 33 variables (paragraph, author info,...)
+We added a 34th column for word as part of the unnesting process (started as 1 row per paragraph, then make a row per word)
+```{r}
+names(nytDat)
+```
+
+```{r}
+paragraph <- names(nytDat)[6] #The 6th column, "response.doc.lead_paragraph", is the one we want here.  
+tokenized <- nytDat %>%
+  unnest_tokens(word, paragraph)
+```
+
+```{r}
+tokenized %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 5) %>% #illegible with all the words displayed, consider increasing threshold to 10
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+## remove stop words
+```{r}
+data(stop_words)
+
+tokenized <- tokenized %>%
+  anti_join(stop_words)
+
+tokenized %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 5) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+```{r}
+clean_tokens <- str_replace_all(tokenized$word,"land[a-z,A-Z]*","land") #stem tribe words
+clean_tokens <- str_remove_all(clean_tokens, "[:digit:]") #remove all numbers
+clean_tokens <- str_remove_all(clean_tokens, "washington")
+clean_tokens <- gsub("’s", '', clean_tokens)
+
+tokenized$clean <- clean_tokens
+```
+
+```{r}
+tokenized %>%
+  count(clean, sort = TRUE) %>%
+  filter(n > 10) %>% #illegible with all the words displayed
+  mutate(clean = reorder(clean, n)) %>%
+  ggplot(aes(n, clean)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+```{r}
+#remove the empty strings
+tib <-subset(tokenized, clean!="")
+
+#reassign
+tokenized <- tib
+
+#try again
+tokenized %>%
+  count(clean, sort = TRUE) %>%
+  filter(n > 10) %>% #illegible with all the words displayed
+  mutate(clean = reorder(clean, n)) %>%
+  ggplot(aes(n, clean)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+
