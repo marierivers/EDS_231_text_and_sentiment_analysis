@@ -1,8 +1,10 @@
 ---
-title: "EDS_231_assignment_1: New York Times API"
+title: 'EDS_231_assignment_1: New York Times API'
 author: "Marie Rivers"
-date: "4/7/2022"
-output: html_document
+date: "4/10/2022"
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -10,78 +12,24 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # New York Times API
+This assignment looks at New York Times articles that contain the term 'PFAS' which refers to perfluoroalkyl and polyfluoroalky compounds found in over 4,000 man-made chemicals. This class of compounds is often referred to as 'forever chemicals' because they do not breakdown in the environment. PFAS chemicals are know or suspected to cause a wide range of health problems such as cancer, weakened immune system, and thyroid disease. PFAS has been detected in drinking water supplies throughout the United States. 
 
+This text analysis uses the New York Times API to look at the frequency of PFAS related articles between 2000 and 2022 and common words contained in those articles.
 ```{r message=FALSE, warning=FALSE}
 library(jsonlite) #convert results from API queries into R-friendly formats 
 library(tidyverse) 
 library(tidytext) #text data management and analysis
 library(ggplot2) #plot word frequencies and publication dates
 library(here)
+library(kableExtra)
 ```
 
-## Connect to the New York Times API and send a query
+## Connect to the New York Times API, set parameters, and send a query
 ```{r}
-#create an object called t with the results of the query ("xxx")
-# the from JSON flatten the JSON object, then convert to a data frame
 api_key <- "GW3whn8dTpvpdcAD1AIAiUMix03szFDn" # article search api
-secret <- "RULf3NTWSXSB46um" # xxx
-q <- "pfas" # query term
-nyt_search_url <- "http://api.nytimes.com/svc/search/v2/articlesearch.json"
-api_query <-paste0(nyt_search_url, "?q=", q, "&api-key=", api_key)
-t <- fromJSON(api_query, flatten = TRUE)
-```
-
-```{r}
-class(t) # t is currently a list
-```
-
-```{r}
-# convert t to a dataframe
-t <- t %>% 
-  data.frame()
-```
-
-```{r}
-#Inspect the data
-class(t) # t is now a data frame
-dim(t) # how big is it?
-names(t) # what variables are we working with?
-#t <- readRDS("nytDat.rds") #in case of API emergency :)
-```
-
-## Look at a piece of text. 
-The data object has a variable called “response.docs.snippet” that contains a short excerpt, or “snippet” from the article. Grab a snippet and try out some basic ‘stringr’ functions.
-
-```{r}
-# xxx...was this supposed to return anythin???
-t$response.docs.snippet[9]
-# $response refers to the 'response column' from the api results
-# snippets (from the NY Times) are sentences. `snippet[9]` pulls the 9th sentence
-# try `response.docs.lead_paragraph` to get paragraphs
-
-#assign a snippet to x to use as fodder for stringr functions.
-```
-
-
-```{r}
-# xxx
-x <- "Her nomination as secretary of the interior is historic, but as the first Native cabinet member, she would have to strike a delicate balance." 
-
-tolower(x)
-str_split(x, ','); str_split(x, 't')
-str_replace(x, 'historic', 'without precedent')
-str_replace(x, ' ', '_') #first one
-#how do we replace all of them?
-
-str_detect(x, 't'); str_detect(x, 'tive') ### is pattern in the string? T/F
-str_locate(x, 't'); str_locate_all(x, 'as')
-```
-
-## Set parameters for a larger query
-```{r}
 term <- "pfas" # Need to use + to string together separate words
-begin_date <- "20120101" # YYYYMMDD
-end_date <- "20220101" #YYYYMMDD
+begin_date <- "20000101" # YYYYMMDD
+end_date <- "20220401" #YYYYMMDD
 
 #construct the query url using API operators
 baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",
@@ -90,7 +38,7 @@ baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",
 ```
 
 ```{r}
-#this code allows for obtaining multiple pages of query results 
+# this code allows for obtaining multiple pages of query results 
 initialQuery <- fromJSON(baseurl)
 maxPages <- round((initialQuery$response$meta$hits[1] / 10) - 1) # might time out at 8 or 9 pages
 
@@ -102,13 +50,20 @@ for(i in 0:maxPages){
   Sys.sleep(6) # change Sys.sleep to 6
 }
 ```
-
 ```{r}
-class(nytSearch)
+class(pages) # this is a list
+class(nytSearch) # this is a data.frame
 ```
 
 ```{r}
-#need to bind the pages and create a tibble from nytDa
+#Inspect the data
+dim(nytSearch) # how big is it?
+names(nytSearch) # what variables are we working with?
+```
+
+
+```{r}
+#need to bind the pages and create a tibble
 nytDat <- rbind_pages(pages)
 class(nytDat)
 ```
@@ -119,9 +74,24 @@ write_csv(nytDat, here("data", "nytDat.csv"))
 ```
 
 ```{r}
-# xxx...backup
-#nytDat <- read_csv("data/nyDat.csv")
+# backup
+#nytDat <- read_csv("data/nytDat.csv")
 ```
+
+```{r}
+nytDat_count <- nytDat %>% 
+  summarize(count=n()) %>% 
+  as.numeric()
+
+news_type_pct <- nytDat %>% 
+  group_by(response.docs.type_of_material) %>%
+  summarize(count=n()) %>%
+  mutate(percent = (count / sum(count))*100) %>% 
+  filter(response.docs.type_of_material == "News") %>% 
+  select(percent) %>% 
+  as.numeric()
+```
+This search resulted in `r nytDat_count` articles and `r news_type_pct`% of these articles were news articles.
 
 ```{r}
 nytDat %>% 
@@ -130,7 +100,24 @@ nytDat %>%
   mutate(percent = (count / sum(count))*100) %>%
   ggplot() +
   geom_bar(aes(y=percent, x=response.docs.type_of_material, fill=response.docs.type_of_material), stat = "identity") + coord_flip() +
-  labs(x = "Type of Material", fill = "Type of Material")
+  labs(x = "Type of Material", fill = "Type of Material",
+       title = "Type of New York Times Material Containing the Term PFAS",
+       subtitle = "January 2000 to April 2022") +
+   theme(plot.title.position = "plot")
+```
+
+```{r fig.height=7, fig.width=7}
+nytDat %>%
+  mutate(pubDay=gsub("T.*","",response.docs.pub_date)) %>%
+  group_by(pubDay) %>%
+  summarise(count=n()) %>%
+  filter(count >= 1) %>% # change this if needed, based on search results
+  ggplot() +
+  geom_bar(aes(x=reorder(pubDay, count), y=count), stat="identity") + coord_flip() +
+  labs(x = "publication date",
+       title = "Publications per Day of NY Times Material Containing the Term PFAS",
+       subtitle = "January 2000 to April 2022") +
+   theme(plot.title.position = "plot")
 ```
 
 ```{r}
@@ -139,87 +126,263 @@ nytDat %>%
   group_by(pubDay) %>%
   summarise(count=n()) %>%
   filter(count >= 1) %>% # change this if needed, based on search results
+  mutate(pubDay = as.Date(pubDay)) %>% 
   ggplot() +
-  geom_bar(aes(x=reorder(pubDay, count), y=count), stat="identity") + coord_flip() +
-  labs(x = "publication date")
+  geom_bar(aes(x=pubDay, y=count), stat="identity", color = "red") +
+  labs(x = "publication date",
+       title = "Publications per Day of NY Times Material Containing the Term PFAS",
+       subtitle = "January 2000 to April 2022", 
+       caption = "As this figure shows, after 2017 there was a significant increase in publication of new articles referring to PFAS") +
+   theme(plot.title.position = "plot",
+         plot.caption = element_text(hjust = 0),
+         plot.caption.position = "plot")
 ```
 
-The New York Times doesn’t make full text of the articles available through the API. But we can use the first paragraph of each article. The NY Times includes 33 variables (paragraph, author info,...) Add a 34th column for 'word' as part of the unnesting process (started as 1 row per paragraph, then make a row per word)
+```{r}
+# example sentence
+nytDat$response.docs.snippet[9]
+# $response refers to the 'response column' from the api results
+# snippets (from the NY Times) are sentences. `snippet[9]` pulls the 9th sentence
+```
+
+
+```{r}
+# example paragraph
+nytDat$response.docs.lead_paragraph[9]
+```
+
+The New York Times doesn’t make full text of the articles available through the API. But we can use the first paragraph of each article. The NY Times includes 33 variables (paragraph, author info,...) Add a 34th column for 'word' as part of the unnesting process (start as 1 row per paragraph, then make a row per word)
 ```{r}
 names(nytDat)
 ```
+## First Paragraph
+Create plots of publications per day and word frequency using the first paragraph variable
 
 ```{r}
 paragraph <- names(nytDat)[6] #The 6th column, "response.doc.lead_paragraph", is the one we want here.  
-tokenized <- nytDat %>%
+tokenized_paragraph <- nytDat %>%
   unnest_tokens(word, paragraph)
 ```
 
 ```{r}
-names(tokenized)
+names(tokenized_paragraph)
 ```
 
-```{r}
-tokenized %>%
+```{r fig.height=8, fig.width=7}
+tokenized_paragraph %>%
   count(word, sort = TRUE) %>%
-  filter(n > 5) %>% #illegible with all the words displayed, consider increasing threshold to 10
+  filter(n > 4) %>% #illegible with all the words displayed, consider increasing threshold to 10
   mutate(word = reorder(word, n)) %>%
   ggplot(aes(n, word)) +
   geom_col() +
-  labs(y = NULL)
+  labs(y = NULL, x = "count",
+       title = "Word Frequency Plot Using First Paragraph (includes stop words)",
+       subtitle = "NY Times Material Containing the Term PFAS, January 2000 to April 2022") +
+   theme(plot.title.position = "plot")
 ```
 
-## remove stop words
-```{r}
+## Remove Stop Words
+```{r fig.height=8, fig.width=7, warning=FALSE}
 data(stop_words)
 
-tokenized <- tokenized %>%
+tokenized_paragraph_no_stop <- tokenized_paragraph %>%
   anti_join(stop_words)
 
-tokenized %>%
+tokenized_paragraph_no_stop %>%
   count(word, sort = TRUE) %>%
-  filter(n > 3) %>% # adjust this based on results
+  filter(n > 2) %>% # adjust this based on results
   mutate(word = reorder(word, n)) %>%
   ggplot(aes(n, word)) +
   geom_col() +
-  labs(y = NULL)
+  labs(y = NULL, x = "count",
+       title = "Word Frequency Plot Using First Paragraph (stop words removed)",
+       subtitle = "NY Times Material Containing the Term PFAS, January 2000 to April 2022") +
+   theme(plot.title.position = "plot")
 ```
-Several steps were taken to clean tokens. Words such as 'administration's' and 'biden's' were cleaned to remove the 's. Numbers, which included single numbers and years, were removed.
+
+## Clean Tokens
+Several steps were taken to clean tokens. Words such as 'administration's' and 'biden's' were cleaned to remove the 's. Numbers, which included single numbers and years, were removed. The word 'washington' was removed because it was generally used to refer to the location tag at the beginning of each article.
 
 ```{r}
-clean_tokens <- str_remove_all(tokenized$word, "[:digit:]") #remove all numbers
-clean_tokens <- gsub("’s", '', clean_tokens) # gsub is used to replace all teh matches of a pattern from a string
+clean_tokens <- str_remove_all(tokenized_paragraph_no_stop$word, "[:digit:]") #remove all numbers
+clean_tokens <- gsub("’s", '', clean_tokens) # gsub is used to replace all the matches of a pattern from a string
+clean_tokens <- gsub(",", '', clean_tokens) # gsub is used to replace all the matches of a pattern from a string
+clean_tokens <- gsub("chemicals", 'chemical', clean_tokens) # gsub is used to replace all the matches of a pattern from a string
+clean_tokens <- gsub("governments", 'government', clean_tokens)
+clean_tokens <- gsub("’d", '', clean_tokens)
+clean_tokens <- gsub("millions", 'million', clean_tokens)
+clean_tokens <- gsub("billions", 'billion', clean_tokens)
+clean_tokens <- gsub("residents", 'resident', clean_tokens)
+clean_tokens <- gsub("waters", 'water', clean_tokens)
+clean_tokens <- str_remove_all(clean_tokens, "washington") # removed 'washingon' because it referred to the publication location
+clean_tokens <- str_remove_all(clean_tokens, "thursday")
+clean_tokens <- str_remove_all(clean_tokens, "wednesday")
+clean_tokens <- str_remove_all(clean_tokens, "here") # additional stop word
+clean_tokens <- str_remove_all(clean_tokens, "a.m") # additional stop word
 #clean_tokens <- str_replace_all(clean_tokens,"land[a-z,A-Z]*","land") #stem tribe words
-#clean_tokens <- str_remove_all(clean_tokens, "washington")
 
-tokenized$clean <- clean_tokens
-```
-
-```{r}
-tokenized %>%
-  count(clean, sort = TRUE) %>%
-  filter(n > 2) %>% # adjust based on results
-  mutate(clean = reorder(clean, n)) %>%
-  ggplot(aes(n, clean)) +
-  geom_col() +
-  labs(y = NULL)
+tokenized_paragraph_no_stop$clean <- clean_tokens
 ```
 
 ```{r}
 #remove the empty strings
-tib <-subset(tokenized, clean!="")
+tib <-subset(tokenized_paragraph_no_stop, clean!="")
 
 #reassign
-tokenized <- tib
+tokenized_paragraph_clean <- tib
 ```
 
-```{r}
-#try again
-tokenized %>%
+```{r fig.height=8, fig.width=7}
+tokenized_paragraph_clean %>%
   count(clean, sort = TRUE) %>%
   filter(n > 2) %>% # adjust based on results
   mutate(clean = reorder(clean, n)) %>%
   ggplot(aes(n, clean)) +
   geom_col() +
-  labs(y = NULL)
+  labs(y = NULL, x = "count",
+       title = "Word Frequency Plot Using First Paragraph (clean tokens)",
+       subtitle = "NY Times Material Containing the Term PFAS, January 2000 to April 2022") +
+  theme(plot.title.position = "plot")
 ```
+
+## Headlines
+Create plots of publications per day and word frequency using the headline variable
+```{r}
+headlines <- names(nytDat)[21] #The 21th column, "rresponse.docs.headline.main", is the one we want here.  
+tokenized_headlines <- nytDat %>%
+  unnest_tokens(word, headlines)
+```
+
+```{r fig.height=8, fig.width=7}
+tokenized_headlines %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 1) %>% #illegible with all the words displayed, consider increasing threshold to 10
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL, x = "count",
+       title = "Word Frequency Plot Using Headlines (includes stop words)",
+       subtitle = "NY Times Material Containing the Term PFAS, January 2000 to April 2022") +
+   theme(plot.title.position = "plot")
+```
+
+## Remove Stop Words
+```{r fig.height=8, fig.width=7}
+tokenized_headlines_no_stop <- tokenized_headlines %>%
+  anti_join(stop_words)
+
+tokenized_headlines_no_stop %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 1) %>% # adjust this based on results
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL, x = "count",
+       title = "Word Frequency Plot Using Headlines (stop words removed)",
+       subtitle = "NY Times Material Containing the Term PFAS, January 2000 to April 2022") +
+   theme(plot.title.position = "plot")
+```
+
+## Clean Tokens
+```{r}
+clean_tokens <- str_remove_all(tokenized_headlines_no_stop$word, "[:digit:]") #remove all numbers
+clean_tokens <- gsub("’s", '', clean_tokens) # gsub is used to replace all the matches of a pattern from a string
+clean_tokens <- gsub(",", '', clean_tokens) # gsub is used to replace all the matches of a pattern from a string
+clean_tokens <- gsub("chemicals", 'chemical', clean_tokens) # gsub is used to replace all the matches of a pattern from a string
+clean_tokens <- str_remove_all(clean_tokens, "here") # additional stop word
+clean_tokens <- str_remove_all(clean_tokens, "isn't") # additional stop word
+clean_tokens <- str_remove_all(clean_tokens, "won't") # additional stop word
+
+tokenized_headlines_no_stop$clean <- clean_tokens
+```
+
+```{r}
+#remove the empty strings
+tib <-subset(tokenized_headlines_no_stop, clean!="")
+
+#reassign
+tokenized_headlines_clean<- tib
+```
+
+```{r fig.height=8, fig.width=7}
+tokenized_headlines_clean %>%
+  count(clean, sort = TRUE) %>%
+  filter(n > 1) %>% # adjust based on results
+  mutate(clean = reorder(clean, n)) %>%
+  ggplot(aes(n, clean)) +
+  geom_col() +
+  labs(y = NULL, x = "count",
+       title = "Word Frequency Plot Using Headlines (clean tokens)",
+       subtitle = "NY Times Material Containing the Term PFAS, January 2000 to April 2022") +
+   theme(plot.title.position = "plot")
+```
+
+## Summary
+```{r}
+pfas_first_paragraph <- tokenized_paragraph_clean %>% 
+  count(clean) %>% 
+  filter(clean == "pfas") %>% 
+  select(n) %>% 
+  as.numeric()
+
+pfas_headlines <- tokenized_headlines_clean %>% 
+  count(clean) %>% 
+  filter(clean == "pfas") %>% 
+  select(n) %>% 
+  as.numeric()
+```
+
+```{r}
+top_words_paragraph <- tokenized_paragraph_clean %>% 
+  count(clean, sort = TRUE) %>% 
+  head(28) %>% 
+  select(clean) %>% 
+  rename(top_words_paragraph = clean)
+
+top_words_headlines <- tokenized_headlines_clean %>% 
+  count(clean, sort = TRUE) %>% 
+  filter(n > 1) %>% 
+  select(clean) %>% 
+  rename(top_words_headlines = clean)
+
+top_words <- data.frame(top_words_paragraph, top_words_headlines)
+```
+
+```{r}
+top_words_table <- top_words %>% 
+  kable(col.names = c("Top Words - First Paragraph", "Top Words - Headlines")) %>% 
+  kable_paper(full_width = FALSE)
+top_words_table
+```
+```{r}
+# identify common words in the list of top words from the first paragraph and headlines 
+common_words <- as.data.frame(intersect(top_words$top_words_paragraph, top_words$top_words_headlines))
+
+common_words_table <- common_words %>% 
+  
+  
+  kable(col.names = "Top Words Common to First Paragraph and Headlines") %>% 
+  kable_paper(full_width = FALSE)
+common_words_table
+```
+```{r}
+unique_words_paragraph <- as.data.frame(setdiff(top_words$top_words_paragraph, top_words$top_words_headlines))
+unique_words_headlines <- as.data.frame(setdiff(top_words$top_words_headlines, top_words$top_words_paragraph))
+```
+
+Top words (occurring 2 or more times) found in both the first paragraph and headlines include: chemical, house, agency, water, toxic, biden, drinking, military, health, cancer, and billion. Top words unique to the first paragraph include: environmental, federal, million, president, protection, trump, administration, day, found, government, newsletter, sign, time, americans, aspirin, bank, and california. Top words unique to the headlines include: e.p.a, briefing, evening, climate, companies, contaminating, coronavirus, democrats, flint, forever, leave, linked, michael, plan, residents, standards, and weaker.
+
+It is interesting to note that the word 'pfas' only appeared `r pfas_first_paragraph` times in the first paragraphs and 0 times in the headlines. Headlines tended to mention chemicals in a general sense, only specifically mentioning PFAS later in the article. Headlines also tended to hint at scary health effects from everyday products in an attempt to get readers' attention.
+
+The plot of publications per day is the same for first paragraphs and headlines.
+
+The table below shows how the headlines were often written to stir fear and curiosity in the article. 
+```{r}
+headlines_table <- nytDat %>% 
+  select(response.docs.headline.main) %>% 
+  kable(col.names = "PFAS headlines") %>% 
+  kable_paper(full_width = FALSE)
+headlines_table
+```
+
+
