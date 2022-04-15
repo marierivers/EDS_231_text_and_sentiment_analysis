@@ -176,15 +176,15 @@ book_sent_counts %>%
 
 # Introduction to the Nexis Uni data source
 ```{r}
-setwd("/Users/marierivers/Documents/UCSB_Environmental_Data_Science/EDS_231_Text_and_Sentiment_Analysis/EDS_231_text_and_sentiment_analysis")
+setwd("/Users/marierivers/Documents/UCSB_Environmental_Data_Science/EDS_231_Text_and_Sentiment_Analysis/EDS_231_text_and_sentiment_analysis/data")
 #to follow along with this example, download this .docx to your working directory: 
 #https://github.com/MaRo406/EDS_231-text-sentiment/blob/main/nexis_dat/Nexis_IPCC_Results.docx
-my_files <- list.files(pattern = ".docx", path = getwd(), "/data",
+my_files <- list.files(pattern = ".docx", path = getwd(),
                        full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
 
 dat <- lnt_read(my_files) #Object of class 'LNT output'
+# lnt_read = read in a LexisNexis file
 ```
-
 
 ```{r}
 meta_df <- dat@meta
@@ -215,8 +215,13 @@ custom_stop_words <- bind_rows(tibble(word = c("your_word"),
                                stop_words)
 ```
 
+```{r}
+
+```
+
+
 Pseudo code for Froelich et al plot:
 mean sentiment by day, summarize
-plotx = day, y = sentiment
+plot x = day, y = sentiment
 
 100 result limit (run multiple times if you want more than 100 results)

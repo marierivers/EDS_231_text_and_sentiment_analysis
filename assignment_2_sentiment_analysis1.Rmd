@@ -11,6 +11,11 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# To Do
+- update to use pfas .docx file
+- clean artifacts of the data collection process
+- add additional stop words
+
 # Sentiment Analysis I
 This assignment uses sentiment analysis to...xxx
 
@@ -26,7 +31,7 @@ library(sentimentr)
 library(readr)
 ```
 **Using the “IPCC” Nexis Uni data set from the class presentation and the pseudo code we discussed, recreate Figure 1A from Froelich et al. (Date x # of 1) positive, 2) negative, 3) neutral headlines):**
-```{r}
+```{r message=FALSE, warning=FALSE}
 data_folder <- "/Users/marierivers/Documents/UCSB_Environmental_Data_Science/EDS_231_Text_and_Sentiment_Analysis/EDS_231_text_and_sentiment_analysis/data"
 my_files <- list.files(pattern = ".docx", path = data_folder,
                        full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
@@ -40,10 +45,10 @@ articles_df <- dat@articles
 paragraphs_df <- dat@paragraphs
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 dat2<- data_frame(element_id = seq(1:length(meta_df$Headline)), Date = meta_df$Date, Headline = meta_df$Headline)
 paragraphs_dat <- data_frame(element_id = paragraphs_df$Art_ID, Text  = paragraphs_df$Paragraph)
-dat3 <- inner_join(dat2,paragraphs_dat, by = "element_id")
+dat3 <- inner_join(dat2, paragraphs_dat, by = "element_id")
 ```
 
 ```{r}
@@ -83,11 +88,120 @@ ggplot(data = sent_df_summary, aes(x = Date, y = num_headlines)) +
                limits = c(as.Date("2022-04-04"), as.Date("2022-04-11")),
                breaks = "1 day")
 ```
+# Nexis Uni search of the ter, 'pfas'
+```{r message=FALSE, warning=FALSE}
+data_folder_pfas <- "/Users/marierivers/Documents/UCSB_Environmental_Data_Science/EDS_231_Text_and_Sentiment_Analysis/EDS_231_text_and_sentiment_analysis/pfas"
+my_files_pfas <- list.files(pattern = ".docx", path = data_folder_pfas,
+                       full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
 
+dat_pfas <- lnt_read(my_files_pfas) #Object of class 'LNT output'
+# lnt_read = read in a LexisNexis file
+```
 
 ```{r}
+meta_pfas_df <- dat_pfas@meta
+articles_pfas_df <- dat_pfas@articles
+paragraphs_pfas_df <- dat_pfas@paragraphs
+```
+
+```{r}
+dat2_pfas<- data_frame(element_id = seq(1:length(meta_pfas_df$Headline)), Date = meta_pfas_df$Date, Headline = meta_pfas_df$Headline)
+
+paragraphs_dat_pfas <- data_frame(element_id = paragraphs_pfas_df$Art_ID, Text  = paragraphs_pfas_df$Paragraph)
+
+dat3_pfas <- inner_join(dat2_pfas,paragraphs_dat_pfas, by = "element_id")
+```
+
+## NRC lexicon
+```{r}
+nrc_sent <- get_sentiments('nrc') %>% 
+  filter(!sentiment %in% c("positive", "negative"))
+```
+
+```{r}
+pfas_text_words <- dat3_pfas %>% 
+  unnest_tokens(output = word, input = Text, token = 'words') %>% 
+  anti_join(stop_words, by = 'word')
+```
+
+```{r}
+#xxx
 custom_stop_words <- bind_rows(tibble(word = c("your_word"),  
                                       lexicon = c("custom")), 
                                stop_words)
 ```
+
+```{r}
+pfas_nrc_sent <- pfas_text_words %>% 
+  inner_join(nrc_sent) %>% 
+  count(word, sentiment, sort = TRUE) %>% 
+  ungroup()
+```
+
+```{r}
+pfas_sent_counts <- pfas_text_words %>% 
+  inner_join(nrc_sent) %>% 
+  #group_by(Date, sentiment) %>% 
+  count(word, sentiment, sort = TRUE) %>% 
+  ungroup()
+```
+
+```{r}
+pfas_sent_plot1 <- pfas_sent_counts %>% 
+  group_by(sentiment) %>% 
+  slice_max(n, n = 10) %>% 
+  ggplot(aes(x = n, y = reorder(word, n), fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+pfas_sent_plot1
+```
+
+```{r}
+words_per_day <- pfas_text_words %>% 
+  inner_join(nrc_sent) %>% 
+  group_by(Date) %>% 
+  count(name = "words_per_day")
+```
+
+```{r}
+pfas_sent_percent <- pfas_text_words %>% 
+  inner_join(nrc_sent) %>% 
+  count(Date, sentiment) %>% 
+  left_join(words_per_day, by = "Date") %>% 
+  mutate(percent = round(((n / words_per_day) * 100), 2))
+  
+```
+
+```{r}
+pfas_sent_plot2 <- ggplot(data = pfas_sent_percent, aes(x = Date, y = percent)) +
+  geom_line(aes(color = sentiment), size = 1.5) +
+  #scale_color_manual(name = "", values = c("red", "gray", "blue"), labels = c ("Negative", "Neutral", "Positve")) +
+  labs(title = "PFAS Text Sentiment Analysis of news articles from xxxx to xxxx",
+       caption = "Source: Nexis Uni",
+       y = "Percent Sentiment of Total Daily Words") +
+  theme_classic() +
+  scale_x_date(date_labels = "%b %d, %Y",
+               limits = c(as.Date("2022-04-04"), as.Date("2022-04-11")),
+               breaks = "2 day") +
+  scale_y_continuous(breaks = seq(0, 100, by = 5))
+pfas_sent_plot2
+```
+
+```{r}
+pfas_sent_plot3 <- ggplot(data = pfas_sent_percent, aes(x = Date, y = percent, fill = sentiment)) +
+  geom_area() +
+  labs(title = "PFAS Text Sentiment Analysis of news articles from xxxx to xxxx",
+       caption = "Source: Nexis Uni",
+       y = "Percent Sentiment of Total Daily Words") +
+  theme_classic() +
+  scale_x_date(date_labels = "%b %d, %Y",
+               limits = c(as.Date("2022-04-04"), as.Date("2022-04-11")),
+               breaks = "2 day") +
+  scale_y_continuous(breaks = seq(0, 100, by = 10))
+pfas_sent_plot3
+```
+
+
 
