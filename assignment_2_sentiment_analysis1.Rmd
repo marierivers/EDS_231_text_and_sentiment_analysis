@@ -1,0 +1,93 @@
+---
+title: "assignment_2_sentiment_analysis1"
+author: "Marie Rivers"
+date: "4/14/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Sentiment Analysis I
+This assignment uses sentiment analysis to...xxx
+
+```{r message=FALSE, warning=FALSE}
+library(tidyr) #text analysis in R
+library(lubridate) #working with date data
+library(pdftools) #read in pdfs
+library(tidyverse)
+library(tidytext)
+library(here)
+library(LexisNexisTools) #Nexis Uni data wrangling
+library(sentimentr)
+library(readr)
+```
+**Using the “IPCC” Nexis Uni data set from the class presentation and the pseudo code we discussed, recreate Figure 1A from Froelich et al. (Date x # of 1) positive, 2) negative, 3) neutral headlines):**
+```{r}
+data_folder <- "/Users/marierivers/Documents/UCSB_Environmental_Data_Science/EDS_231_Text_and_Sentiment_Analysis/EDS_231_text_and_sentiment_analysis/data"
+my_files <- list.files(pattern = ".docx", path = data_folder,
+                       full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+
+dat <- lnt_read(my_files) #Object of class 'LNT output'
+# lnt_read = read in a LexisNexis file
+```
+```{r}
+meta_df <- dat@meta
+articles_df <- dat@articles
+paragraphs_df <- dat@paragraphs
+```
+
+```{r}
+dat2<- data_frame(element_id = seq(1:length(meta_df$Headline)), Date = meta_df$Date, Headline = meta_df$Headline)
+paragraphs_dat <- data_frame(element_id = paragraphs_df$Art_ID, Text  = paragraphs_df$Paragraph)
+dat3 <- inner_join(dat2,paragraphs_dat, by = "element_id")
+```
+
+```{r}
+mytext <- get_sentences(dat2$Headline)
+sent <- sentiment(mytext)
+
+sent_df <- inner_join(dat2, sent, by = "element_id")
+
+sentiment <- sentiment_by(sent_df$Headline)
+
+sent_df <- sent_df%>%
+  arrange(sentiment)
+```
+
+```{r}
+sent_df_summary <- sent_df %>% 
+  mutate(sent_category = case_when(
+    sentiment < 0 ~ "negative",
+    sentiment > 0 ~ "positive",
+    sentiment == 0 ~ "neutral")) %>% 
+  group_by(Date, sent_category) %>% 
+  summarise(num_headlines = n())
+```
+
+```{r}
+ggplot(data = sent_df_summary, aes(x = Date, y = num_headlines)) +
+  geom_line(aes(color = sent_category), size = 1.5) +
+  scale_color_manual(name = "",
+                     values = c("red", "gray", "blue"),
+                     labels = c ("Negative", "Neutral", "Positve")) +
+  labs(title = "IPCC Headline Sentiment Analysis",
+       y = "Media Sentiment\n(no. headlines)") +
+  theme_classic() +
+  theme(legend.position = c(0.9, 0.9),
+        legend.background = element_blank()) +
+  scale_x_date(date_labels = "%b %d, %Y",
+               limits = c(as.Date("2022-04-04"), as.Date("2022-04-11")),
+               breaks = "1 day")
+```
+
+
+```{r}
+custom_stop_words <- bind_rows(tibble(word = c("your_word"),  
+                                      lexicon = c("custom")), 
+                               stop_words)
+```
+
