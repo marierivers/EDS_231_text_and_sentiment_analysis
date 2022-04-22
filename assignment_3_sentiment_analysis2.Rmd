@@ -1,0 +1,133 @@
+---
+title: "Assignment 3 - Sentiment Analysis II"
+author: "Marie Rivers"
+date: "4/20/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, results='hide', message=FALSE, warning=FALSE}
+library(quanteda)
+library(quanteda.sentiment)
+library(quanteda.textstats)
+library(tidyverse)
+library(tidytext)
+library(lubridate)
+library(wordcloud) #visualization of common words in the data set
+library(reshape2)
+library(sentimentr)
+```
+
+This assignment uses tweet data for the term 'IPCC'
+```{r tweet_data}
+raw_tweets <- read.csv("https://raw.githubusercontent.com/MaRo406/EDS_231-text-sentiment/main/dat/IPCC_tweets_April1-10_sample.csv", header=TRUE)
+
+dat<- raw_tweets[,c(5,7)] # Extract Date and Title fields
+
+tweets <- tibble(text = dat$Title,
+                  id = seq(1:length(dat$Title)),
+                 date = as.Date(dat$Date,'%m/%d/%y'))
+
+#clean up the URLs from the tweets (people linking to news articles and such)
+tweets$text <- gsub("http[^[:space:]]*", "",tweets$text) # substitute http links with nothing
+tweets$text <- str_to_lower(tweets$text)
+```
+
+# 1.  Think about how to further clean a twitter data set. Let's assume that the mentions of twitter accounts is not useful to us. Remove them from the text field of the tweets tibble.
+```{r}
+tweets_clean <- tweets %>% 
+  mutate(text_clean = text)  # keeping a column of the original text as a check
+  
+tweets_clean$text_clean <- gsub("@[^[:space:]]*", "", tweets_clean$text_clean)
+```
+
+# 2.  Compare the ten most common terms in the tweets per day.  Do you notice anything interesting?
+```{r}
+#tokenize tweets to individual words
+words <- tweets_clean %>%
+  select(id, date, text_clean) %>%
+  unnest_tokens(output = word, input = text_clean, token = "words") %>% 
+  anti_join(stop_words, by = "word")
+```
+
+```{r}
+words_count <- words %>% 
+  count(date, word)
+
+top_ten_per_day <- words_count %>% 
+  group_by(date) %>% 
+  top_n(10, n)
+```
+
+```{r}
+#xxx
+tab_with_group <- table(top_ten_per_day$date, top_ten_per_day$word)    # Create table with groups
+```
+
+# 3.  Adjust the wordcloud in the "wordcloud" chunk by coloring the positive and negative words so they are identifiable.
+```{r warning=FALSE}
+#load sentiment lexicon
+bing_sent <- get_sentiments('bing')
+
+words_sent <- words %>% 
+  left_join(bing_sent, by = "word") %>%
+  left_join(
+    tribble(
+      ~sentiment, ~sent_score,
+      "positive", 1,
+      "negative", -1),
+    by = "sentiment")
+
+#xxx...color by sentiment
+wordcloud_sent <- words_sent %>% 
+  count(word) %>% 
+  with(wordcloud(word, n, max.words = 100))
+```
+
+# 4. Let's say we are interested in the most prominent entities in the Twitter discussion.  Which are the top 10 most tagged accounts in the data set. Hint: the "explore_hashtags" chunk is a good starting point.
+```{r create_corpus}
+corpus <- corpus(dat$Title) #enter quanteda
+# corpus is a collection of documents (ie tweets) with metadata
+```
+
+```{r explore_hashtags}
+tagged_tweets <- tokens(corpus, remove_punct = TRUE) %>% 
+               tokens_keep(pattern = "@*")
+dfm_tagged<- dfm(tagged_tweets)
+
+tstat_freq <- textstat_frequency(dfm_tagged, n = 10)
+
+#tidytext gives us tools to convert to tidy from non-tidy formats
+tagged_tib<- tidy(dfm_tagged)
+
+tagged_tib %>%
+   count(term) %>%
+   with(wordcloud(term, n, max.words = 10))
+```
+
+# 5. The Twitter data download comes with a variable called "Sentiment" that must be calculated by Brandwatch.  Use your own method to assign each tweet a polarity score (Positive, Negative, Neutral) and compare your classification to Brandwatch's (hint: you'll need to revisit the "raw_tweets" data frame). 
+```{r}
+dat2<- raw_tweets[,c(5, 7, 11)] # Extract Date, Title, and Sentiment fields
+
+tweets2 <- tibble(text = dat2$Title,
+                  element_id = seq(1:length(dat2$Title)),
+                 date = as.Date(dat2$Date,'%m/%d/%y'),
+                 sent_brandwatch = dat2$Sentiment)
+```
+
+```{r warning=FALSE}
+sent_method2 <- sentiment_by(tweets2$text)
+
+tweets2 <- inner_join(tweets2, sent_method2, by = "element_id") %>%
+  mutate(sent_method2 = case_when(
+    ave_sentiment < 0 ~ "negative",
+    ave_sentiment > 0 ~ "positive",
+    ave_sentiment == 0 ~ "neutral"))
+```
+
+xxx...think of way to visualize this
