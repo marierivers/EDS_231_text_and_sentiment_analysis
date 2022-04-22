@@ -21,6 +21,7 @@ library(lubridate)
 library(wordcloud) #visualization of common words in the data set
 library(reshape2)
 library(sentimentr)
+library(kableExtra)
 ```
 
 This assignment uses tweet data for the term 'IPCC'
@@ -65,8 +66,14 @@ top_ten_per_day <- words_count %>%
 ```
 
 ```{r}
-#xxx
-tab_with_group <- table(top_ten_per_day$date, top_ten_per_day$word)    # Create table with groups
+top_ten_table = aggregate(top_ten_per_day$word, list(top_ten_per_day$date), paste, collapse=", ") %>% 
+  rename(Date = Group.1) %>% 
+  rename(top_words = x) %>% 
+  kable(col.names = c("Date", "Top 10 Words")) %>% 
+  kable_paper(full_width = TRUE) %>% 
+  row_spec(c(0), background = "lightgray")
+top_ten_table
+# xxx...based on the top 10 words there might be some more cleaning to do...should we remove duplicate tweets?
 ```
 
 # 3.  Adjust the wordcloud in the "wordcloud" chunk by coloring the positive and negative words so they are identifiable.
