@@ -1,7 +1,7 @@
 ---
 title: "Assignment 3 - Sentiment Analysis II"
 author: "Marie Rivers"
-date: "4/20/2022"
+date: "4/26/2022"
 output:
   pdf_document: default
   html_document: default
@@ -28,7 +28,7 @@ This assignment uses tweet data for the term 'IPCC'
 ```{r tweet_data}
 raw_tweets <- read.csv("https://raw.githubusercontent.com/MaRo406/EDS_231-text-sentiment/main/dat/IPCC_tweets_April1-10_sample.csv", header=TRUE)
 
-dat<- raw_tweets[,c(5,7)] # Extract Date and Title fields
+dat<- raw_tweets[,c(4,6)] # Extract Date and Title fields
 
 tweets <- tibble(text = dat$Title,
                   id = seq(1:length(dat$Title)),
@@ -45,6 +45,7 @@ tweets_clean <- tweets %>%
   mutate(text_clean = text)  # keeping a column of the original text as a check
   
 tweets_clean$text_clean <- gsub("@[^[:space:]]*", "", tweets_clean$text_clean)
+head(tweets_clean)
 ```
 
 # 2.  Compare the ten most common terms in the tweets per day.  Do you notice anything interesting?
@@ -73,7 +74,6 @@ top_ten_table = aggregate(top_ten_per_day$word, list(top_ten_per_day$date), past
   kable_paper(full_width = TRUE) %>% 
   row_spec(c(0), background = "lightgray")
 top_ten_table
-# xxx...based on the top 10 words there might be some more cleaning to do...should we remove duplicate tweets?
 ```
 
 # 3.  Adjust the wordcloud in the "wordcloud" chunk by coloring the positive and negative words so they are identifiable.
@@ -90,10 +90,11 @@ words_sent <- words %>%
       "negative", -1),
     by = "sentiment")
 
-#xxx...color by sentiment
 wordcloud_sent <- words_sent %>% 
-  count(word) %>% 
-  with(wordcloud(word, n, max.words = 100))
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("lightsalmon4", "dodgerblue3", "gray40"),
+                   max.words = 100)
 ```
 
 # 4. Let's say we are interested in the most prominent entities in the Twitter discussion.  Which are the top 10 most tagged accounts in the data set. Hint: the "explore_hashtags" chunk is a good starting point.
@@ -116,10 +117,19 @@ tagged_tib %>%
    count(term) %>%
    with(wordcloud(term, n, max.words = 10))
 ```
+```{r warning=FALSE}
+top_ten_tags <- tagged_tib %>% 
+  count(term) %>% 
+  top_n(10, n) %>% 
+  kable(col.names = c("Tag", "Count")) %>% 
+  kable_paper(full_width = FALSE) %>% 
+  row_spec(c(0), background = "lightgray")
+top_ten_tags
+```
 
 # 5. The Twitter data download comes with a variable called "Sentiment" that must be calculated by Brandwatch.  Use your own method to assign each tweet a polarity score (Positive, Negative, Neutral) and compare your classification to Brandwatch's (hint: you'll need to revisit the "raw_tweets" data frame). 
 ```{r}
-dat2<- raw_tweets[,c(5, 7, 11)] # Extract Date, Title, and Sentiment fields
+dat2<- raw_tweets[,c(4, 6, 10)] # Extract Date, Title, and Sentiment fields
 
 tweets2 <- tibble(text = dat2$Title,
                   element_id = seq(1:length(dat2$Title)),
@@ -137,4 +147,60 @@ tweets2 <- inner_join(tweets2, sent_method2, by = "element_id") %>%
     ave_sentiment == 0 ~ "neutral"))
 ```
 
-xxx...think of way to visualize this
+```{r}
+sent_method_comparison <- tweets2 %>% 
+  mutate(sent_comparison = case_when(
+    sent_brandwatch == "positive" & sent_method2 == "positive" ~ "both positive",
+    sent_brandwatch == "negative" & sent_method2 == "negative" ~ "both negative",
+    sent_brandwatch == "neutral" & sent_method2 == "neutral" ~ "both neutral",
+    sent_brandwatch == "positive" & sent_method2 == "negative" ~ "brandwatch positive, method 2 negative",
+    sent_brandwatch == "positive" & sent_method2 == "neutral" ~ "brandwatch positive, method 2 neutral",
+    sent_brandwatch == "neutral" & sent_method2 == "positive" ~ "brandwatch neutral, method 2 positive",
+    sent_brandwatch == "neutral" & sent_method2 == "negative" ~ "brandwatch neutral, method 2 negative",
+    sent_brandwatch == "negative" & sent_method2 == "positive" ~ "brandwatch negative, method 2 positive",
+    sent_brandwatch == "negative" & sent_method2 == "neutral" ~ "brandwatch negative, method 2 neutral"))
+
+sent_method_comparison_counts <- sent_method_comparison %>% 
+  count(sent_comparison)
+```
+
+```{r warning=FALSE}
+sent_method_comparison_counts2 <- sent_method_comparison %>%
+  group_by(sent_brandwatch, sent_method2) %>% 
+  summarise(count = n())
+```
+
+
+```{r warning=FALSE}
+n_tweets <- nrow(tweets2)
+sent_method_comparison_table <- sent_method_comparison %>% 
+  count(sent_comparison) %>% 
+  mutate(percent = round((n / n_tweets) * 100, 1)) %>% 
+  kable(col.names = c("Comparison", "Count", "Percent")) %>% 
+  kable_paper(full_width = FALSE) %>% 
+  row_spec(c(0), background = "lightgray")
+sent_method_comparison_table
+```
+```{r}
+both_neg <- sent_method_comparison_counts$n[sent_method_comparison_counts$sent_comparison == "both negative"]
+both_pos <- sent_method_comparison_counts$n[sent_method_comparison_counts$sent_comparison == "both positive"]
+both_neutral <- sent_method_comparison_counts$n[sent_method_comparison_counts$sent_comparison == "both neutral"]
+bw_neu_meth2_pos <- sent_method_comparison_counts$n[sent_method_comparison_counts$sent_comparison == "brandwatch neutral, method 2 positive"]
+bw_neu_meth2_neg <- sent_method_comparison_counts$n[sent_method_comparison_counts$sent_comparison == "brandwatch neutral, method 2 negative"]
+opposite <- (sent_method_comparison_counts$n[sent_method_comparison_counts$sent_comparison == "brandwatch negative, method 2 positive"]) + (sent_method_comparison_counts$n[sent_method_comparison_counts$sent_comparison == "brandwatch positive, method 2 negative"])
+```
+
+There were `r both_neg` tweets where both methods assigned a negative sentiment, `r both_pos` tweets where both methods assigned a positive sentiment, and `r both_neutral` tweets where both methods assigned a neutral sentiment. The greatest disagreements were when brandwatch assigned a neutral sentiment but the other method assigned a positive sentiment (`r bw_neu_meth2_pos` tweets) or a negative sentiment (`r bw_neu_meth2_neg` tweets). There were `r opposite` tweets where the two methods assigned completely opposite sentiments.
+
+```{r}
+ggplot(data = sent_method_comparison_counts2, aes(x = sent_brandwatch, y = sent_method2)) +
+  geom_tile(aes(fill = count), show.legend = FALSE) +
+  geom_text(aes(label = count), color = "black", size = 8) + 
+  theme_minimal() +
+  theme(panel.grid.major = element_blank()) +
+  scale_fill_gradientn(colors = c("seagreen1", "seagreen4")) + 
+  labs(title = "Comparison of Sentiment Methods",
+       x = "brandwatch sentiment",
+       y = "other sentiment method")
+  
+```
