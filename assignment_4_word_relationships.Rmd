@@ -215,21 +215,22 @@ keyness_function(reference_report_year = 2017, target_report_year = 2018)
 keyness_function(reference_report_year = 2019, target_report_year = 2020)
 # hey covid-2019 pandemic
 ```
-Note:
-EPA_EJ_2015.pdf is report for FY 2015 (published Sept. 2016)
-
-EPA_EJ_2016.pdf is report for FY 2015-2016
-
-EPA_EJ_2017.pdf is report for FY 2018
-
-EPA_EJ_2018.pdf is report for FY 2017
-
-EPA_EJ_2019.pdf is report for FY 2019
-
-EPA_EJ_2020.pdf is report for FY 2020
 
 # 4.  Select a word or multi-word term of interest and identify words related to it using windowing and keyness comparison. To do this you will create two objects: one containing all words occurring within a 10-word window of your term of interest, and the second object containing all other words. Then run a keyness comparison on these objects. Which one is the target, and which the reference? [Hint](https://tutorials.quanteda.io/advanced-operations/target-word-collocations/)
 ```{r}
-
+drinking_water <- c("water")
+toks_inside <- tokens_keep(toks1, pattern = drinking_water, window = 10)
+toks_inside <- tokens_remove(toks_inside, pattern = drinking_water) # remove the keywords
+toks_outside <- tokens_remove(toks1, pattern = drinking_water, window = 10)
 ```
 
+```{r}
+dfmat_inside <- dfm(toks_inside)
+dfmat_outside <- dfm(toks_outside)
+
+# target is dfmat_inside, reference is dfmat_outside
+tsat_key_inside <- textstat_keyness(rbind(dfmat_inside, dfmat_outside),
+                                    target = seq_len(ndoc(dfmat_inside)))
+head(tsat_key_inside, 20) %>% 
+  knitr::kable(caption = "Words Related to Water")
+```
