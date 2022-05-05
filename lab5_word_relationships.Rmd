@@ -220,7 +220,7 @@ Now we can upgrade that by using all of the frequencies for each word in each do
 # keyness is a quanteda thing
 keyness <- textstat_keyness(dfm, target = 1) # target = 1 refers to the first document (ie the 2015 report)
 textplot_keyness(keyness)
-# accountng for baseline frequency, "climate" occured more than expected based on baseline frequency
+# accounting for baseline frequency, "climate" occurred more than expected based on baseline frequency
 # words with negative chi squared occur less frequently in 2015 than expected based on all other years
 # reference is all the reports except 2015
 ```

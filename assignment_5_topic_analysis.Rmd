@@ -1,0 +1,190 @@
+---
+title: "assignment_5_topic_analysis"
+author: "Marie Rivers"
+date: '2022-05-05'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, message=FALSE, warning=FALSE}
+library(forcats)
+library(ggplot2)
+library(ggraph)
+library(here)
+library(igraph) #network plots
+library(ldatuning)
+library(LDAvis)
+library(lubridate) #working with date data
+library(pdftools)
+library(quanteda)
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(readr)
+library(readtext) #quanteda subpackage for reading pdf
+library(reshape2)
+library(stringr)
+library(tidyr) #text analysis in R
+library(tidytext)
+library(tidyverse)
+library(tm)
+library(topicmodels)
+library("tsne")
+library(widyr) # pairwise correlations
+```
+
+```{r}
+files <- list.files(path = here("movie_scripts"),
+                    pattern = "pdf$", full.names = TRUE)
+
+movie_scripts <- lapply(files, pdf_text)
+
+movie_scripts_pdf <- readtext(file = here("movie_scripts", "*.pdf"),
+                              docvarsfrom = c("metadata", "filenames", "filepaths"),
+                              sep = "_")
+
+#creating an initial corpus containing our data
+script_corp <- corpus(x = movie_scripts_pdf, text_field = "text" )
+summary(script_corp) %>% 
+  knitr::kable(caption = "Summary of Movie Script Corpus")
+```
+
+```{r}
+toks <- tokens(script_corp, remove_punct = TRUE, remove_numbers = TRUE)
+# Add project-specific stop words here
+add_stops <- c(stopwords("en"),"xxx", "yyy", "zzz")
+toks1 <- tokens_select(toks, pattern = add_stops, selection = "remove")
+```
+
+Convert to a document-feature matrix
+```{r}
+dfm_comm <- dfm(toks1, tolower = TRUE)
+dfm <- dfm_wordstem(dfm_comm)
+dfm <- dfm_trim(dfm, min_docfreq = 2) #remove terms only appearing in one doc (min_termfreq = 10)
+
+print(head(dfm))
+```
+
+```{r}
+#remove rows (docs) with all zeros...for the topic model you can't have zeros
+sel_idx <- slam::row_sums(dfm) > 0 
+dfm <- dfm[sel_idx, ]
+#comments_df <- dfm[sel_idx, ]
+```
+
+```{r}
+result <- FindTopicsNumber(
+  dfm,
+  topics = seq(from = 2, to = 20, by = 1),
+  metrics = c("CaoJuan2009",  "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  verbose = TRUE
+)
+
+FindTopicsNumber_plot(result)
+```
+
+```{r}
+k <- 7 # k is the number of topics
+
+topicModel_k7 <- LDA(dfm, k, method="Gibbs", control=list(iter = 500, verbose = 25))
+```
+
+```{r}
+#nTerms(dfm_comm) 
+
+tmResult <- posterior(topicModel_k7)
+attributes(tmResult)
+```
+
+```{r}
+#nTerms(dfm_comm)   
+beta <- tmResult$terms   # get beta from results
+dim(beta)                # K distributions over nTerms(DTM) terms# lengthOfVocab
+```
+
+```{r}
+terms(topicModel_k7, 10)
+```
+
+
+```{r}
+theta <- tmResult$topics
+beta <- tmResult$terms
+vocab <- (colnames(beta))
+```
+
+```{r}
+comment_topics <- tidy(topicModel_k7, matrix = "beta")
+
+top_terms <- comment_topics %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_terms
+# beta is the probability of a term in a topic...highest beta or words most likely to be in topic
+```
+
+```{r}
+top_terms %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+```
+
+Assign names to the topics so we know what we are working with. We can name them by their top terms
+
+```{r}
+top5termsPerTopic <- terms(topicModel_k7, 5)
+topicNames <- apply(top5termsPerTopic, 2, paste, collapse=" ")
+```
+
+We can explore the theta matrix, which contains the distribution of each topic over each document
+
+```{r}
+exampleIds <- c(1, 2, 3)
+N <- length(exampleIds)
+```
+
+```{r}
+#lapply(epa_corp[exampleIds], as.character) #uncomment to view example text
+# get topic proportions form example documents
+topicProportionExamples <- theta[exampleIds,]
+colnames(topicProportionExamples) <- topicNames
+vizDataFrame <- melt(cbind(data.frame(topicProportionExamples), document=factor(1:N)), variable.name = "topic", id.vars = "document")  
+ggplot(data = vizDataFrame, aes(topic, value, fill = document), ylab = "proportion") +
+  geom_bar(stat="identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  
+  coord_flip() +
+  facet_wrap(~ document, ncol = N)
+# named topics based on first 5 words
+# first column show prevalence of each topic in the 1st document
+# 1, 2, 3 are the 1st, 2nd, and 3rd documents and the plot shows how each topic is distributed within each document
+```
+
+Here’s a neat JSON-based model visualizer
+
+```{r}
+library(LDAvis)
+library("tsne")
+svd_tsne <- function(x) tsne(svd(x)$u)
+json <- createJSON(
+  phi = tmResult$terms, 
+  theta = tmResult$topics, 
+  doc.length = rowSums(dfm), 
+  vocab = colnames(dfm), 
+  term.frequency = colSums(dfm),
+  mds.method = svd_tsne,
+  plot.opts = list(xlab="", ylab="")
+)
+
+serVis(json)
+```
+
