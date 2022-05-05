@@ -2,7 +2,9 @@
 title: "assignment_5_topic_analysis"
 author: "Marie Rivers"
 date: '2022-05-05'
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -53,7 +55,8 @@ summary(script_corp) %>%
 
 ```{r}
 toks <- tokens(script_corp, remove_punct = TRUE, remove_numbers = TRUE)
-# Add project-specific stop words here
+
+# xxx...add custome stop words such as character names from Don't Look Up
 add_stops <- c(stopwords("en"),"xxx", "yyy", "zzz")
 toks1 <- tokens_select(toks, pattern = add_stops, selection = "remove")
 ```
@@ -158,7 +161,12 @@ N <- length(exampleIds)
 # get topic proportions form example documents
 topicProportionExamples <- theta[exampleIds,]
 colnames(topicProportionExamples) <- topicNames
-vizDataFrame <- melt(cbind(data.frame(topicProportionExamples), document=factor(1:N)), variable.name = "topic", id.vars = "document")  
+rownames(topicProportionExamples) <- c("Before the Flood", "Don't Look Up", "Inconvient Truth")
+vizDataFrame <- melt(cbind(data.frame(topicProportionExamples), document=factor(1:N)), variable.name = "topic", id.vars = "document")  %>% 
+  mutate(document = case_when(
+    document == 1 ~ "Before the Flood",
+    document == 2 ~ "Don't Look Up",
+    document == 3 ~ "Inconvient Truth"))
 ggplot(data = vizDataFrame, aes(topic, value, fill = document), ylab = "proportion") +
   geom_bar(stat="identity") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  
