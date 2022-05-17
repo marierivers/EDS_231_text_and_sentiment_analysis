@@ -49,7 +49,7 @@ summary(epa_corp) %>%
 ```{r}
 # Add some additional, context-specific stop words to stop word lexicon
 more_stops <-c("2015","2016", "2017", "2018", "2019", "2020", "www.epa.gov", "https")
-add_stops<- tibble(word = c(stop_words$word, more_stops))
+add_stops <- tibble(word = c(stop_words$word, more_stops))
 stop_vec <- as_vector(add_stops)
 ```
 
